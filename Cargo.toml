@@ -1,0 +1,20 @@
+[package]
+name = "plaza"
+version = "0.2.0"
+edition = "2024"
+description = "A multiplayer pixel canvas server with live updates and crash-safe persistence"
+
+[lib]
+name = "plaza"
+path = "src/lib.rs"
+
+[[bin]]
+name = "plaza"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8.9", features = ["ws"] }
+clap = { version = "4.6.3", features = ["derive"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+tokio = { version = "1.54.0", features = ["rt-multi-thread", "net", "sync", "macros", "time", "signal", "io-util"] }
+tokio-util = { version = "0.7.20", features = ["codec"] }

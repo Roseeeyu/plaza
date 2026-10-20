@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plaza</title>
+<style>
+  :root {
+    --bg: #f4f4f1; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+    --border: #dcdcd6; --accent: #3690ea; --bad: #be0039; --ok: #00a368;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --panel: #212120; --text: #ececea; --muted: #9a9a94;
+            --border: #353533; --accent: #5aa6f0; --bad: #ff5d7f; --ok: #3fd29a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 16px;
+           border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .02em; }
+  .stat { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+         background: var(--bad); margin-right: 6px; vertical-align: middle; }
+  .dot.on { background: var(--ok); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 16px; }
+  @media (max-width: 820px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .board { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+           padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  #wrap { position: relative; max-width: 100%; }
+  canvas { display: block; image-rendering: pixelated; touch-action: none; cursor: crosshair;
+           max-width: 100%; border: 1px solid var(--border); }
+  #hover { position: absolute; pointer-events: none; border: 2px solid #000;
+           outline: 1px solid #fff; display: none; }
+  #pos { color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.4em; }
+  aside { display: flex; flex-direction: column; gap: 16px; }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+               color: var(--muted); margin: 0 0 8px; }
+  .palette { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+  .swatch { aspect-ratio: 1; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; padding: 0; }
+  .swatch.sel { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .seg button { border: 1px solid var(--border); background: transparent; color: var(--text);
+                padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .seg button.sel { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #cool { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 8px; }
+  #coolbar { height: 100%; width: 0; background: var(--bad); transition: width .1s linear; }
+  #log { height: 220px; overflow-y: auto; font: 12px/1.5 ui-monospace, Menlo, monospace;
+         white-space: pre-wrap; word-break: break-all; margin: 0; }
+  #log .out { color: var(--accent); }
+  #log .err { color: var(--bad); }
+  #cmd { width: 100%; margin-top: 8px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+         background: var(--bg); color: var(--text); font: 12px ui-monospace, Menlo, monospace; }
+  label { color: var(--muted); }
+  #join { display: flex; gap: 6px; margin-left: auto; }
+  #join input { width: 140px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+                background: var(--bg); color: var(--text); font: inherit; }
+  #join button { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--accent);
+                 background: var(--accent); color: #fff; cursor: pointer; font: inherit; }
+  #me { color: var(--muted); }
+  #me b { color: var(--text); }
+  #hint { color: var(--muted); }
+  #activity { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  #activity li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0;
+                 border-bottom: 1px solid var(--border); }
+  #activity li:last-child { border-bottom: 0; }
+  #activity .chip { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+                    margin-right: 6px; vertical-align: -1px; border: 1px solid var(--border); }
+  #activity .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Plaza</h1>
+  <span class="stat"><span id="dot" class="dot"></span><span id="status">connecting…</span></span>
+  <span class="stat">seq <b id="seq">–</b></span>
+  <span class="stat" id="size"></span>
+  <form id="join">
+    <span id="me"></span>
+    <input id="nick" maxlength="16" placeholder="nickname" autocomplete="off"
+           pattern="[A-Za-z0-9_\-]{1,16}" title="1-16 letters, digits, _ or -">
+    <button>Join</button>
+  </form>
+</header>
+<main>
+  <div class="board">
+    <div id="wrap"><canvas id="cv" width="64" height="64"></canvas><div id="hover"></div></div>
+    <div id="pos"></div>
+    <div id="hint">Pick a nickname (top right) to start painting.</div>
+  </div>
+  <aside>
+    <section>
+      <h2>Color</h2>
+      <div class="palette" id="palette"></div>
+    </section>
+    <section>
+      <h2>Brush</h2>
+      <div class="row seg" id="brush"></div>
+      <div class="row" style="margin-top:8px"><label>Sizes above 1×1 send one atomic <code>stamp</code>.</label></div>
+      <div id="cool"><div id="coolbar"></div></div>
+      <div class="stat" id="cooltext" style="margin-top:4px">ready</div>
+    </section>
+    <section>
+      <h2>Recent activity</h2>
+      <ul id="activity"></ul>
+    </section>
+    <section>
+      <h2>Protocol log</h2>
+      <pre id="log"></pre>
+      <input id="cmd" placeholder="type a raw command, e.g. read 3 4" autocomplete="off">
+    </section>
+  </aside>
+</main>
+<script>
+const COLORS = [
+  ["white", "#ffffff"], ["silver", "#d4d7d9"], ["gray", "#898d90"], ["black", "#222222"],
+  ["pink", "#ff99aa"], ["red", "#be0039"], ["orange", "#ff9600"], ["brown", "#9c6926"],
+  ["yellow", "#ffd635"], ["lime", "#7eed56"], ["green", "#00a368"], ["cyan", "#00ccc0"],
+  ["blue", "#3690ea"], ["navy", "#2450a4"], ["purple", "#811e9f"], ["magenta", "#de107f"],
+];
+const NAME_TO_CODE = Object.fromEntries(COLORS.map(([n], i) => [n, i]));
+const BRUSHES = [1, 2, 4, 8];
+
+const $ = (id) => document.getElementById(id);
+const cv = $("cv"), ctx = cv.getContext("2d");
+let W = 0, H = 0, pixels = null, seq = 0;
+let color = 5, brush = 1;
+let phase = "size";        // size -> sync -> live
+let pending = [];          // diffs buffered until the sync snapshot lands
+let coolUntil = 0, coolTotal = 0;
+let ws, lastSent = null, logLines = 0;
+let myName = null, wantName = null;
+let hoverCell = null, hoverTimer = 0, hoverAuthor = new Map();
+const activity = [];
+
+// ---------- UI ----------
+COLORS.forEach(([name, hex], i) => {
+  const b = document.createElement("button");
+  b.className = "swatch" + (i === color ? " sel" : "");
+  b.style.background = hex; b.title = `${name} (${i.toString(16)})`;
+  b.onclick = () => { color = i; document.querySelectorAll(".swatch").forEach((s, j) => s.classList.toggle("sel", j === i)); };
+  $("palette").appendChild(b);
+});
+BRUSHES.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.textContent = `${s}×${s}`; if (s === brush) b.className = "sel";
+  b.onclick = () => { brush = s; [...$("brush").children].forEach((c, j) => c.classList.toggle("sel", j === i)); };
+  $("brush").appendChild(b);
+});
+
+function storedName() { try { return localStorage.getItem("plaza-name"); } catch { return null; } }
+function storeName(n) { try { localStorage.setItem("plaza-name", n); } catch { /* private mode */ } }
+
+$("nick").value = storedName() || "";
+$("join").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const name = $("nick").value.trim();
+  if (!/^[A-Za-z0-9_-]{1,16}$/.test(name)) { $("nick").reportValidity(); return; }
+  wantName = name;
+  send(`hello ${name}`);
+});
+
+function showMe() {
+  $("me").innerHTML = "";
+  if (myName) { $("me").append("painting as "); const b = document.createElement("b"); b.textContent = myName; $("me").append(b); }
+  $("hint").style.display = myName ? "none" : "";
+}
+
+// Recent commits, newest first. A stamp's diffs share one seq, so they
+// fold into a single entry.
+function noteActivity(seq, author, code) {
+  const top = activity[0];
+  if (top && top.seq === seq) { top.count++; }
+  else { activity.unshift({ seq, author, code, count: 1, at: new Date() }); activity.length = Math.min(activity.length, 10); }
+  renderActivity();
+}
+function renderActivity() {
+  const ul = $("activity"); ul.innerHTML = "";
+  for (const a of activity) {
+    const li = document.createElement("li"), who = document.createElement("span"), chip = document.createElement("span");
+    chip.className = "chip"; chip.style.background = COLORS[a.code][1];
+    who.append(chip, `${a.author} · ${a.count} px`);
+    const when = document.createElement("span"); when.className = "when";
+    when.textContent = a.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    li.append(who, when); ul.appendChild(li);
+  }
+}
+
+function log(text, cls) {
+  const el = $("log"), line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = text;
+  el.appendChild(line);
+  if (++logLines > 400) { el.firstChild.remove(); logLines--; }
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(text, on) { $("status").textContent = text; $("dot").classList.toggle("on", on); }
+
+// ---------- canvas ----------
+function setSize(w, h) {
+  W = w; H = h; pixels = new Uint8Array(w * h);
+  cv.width = w; cv.height = h;
+  const scale = Math.max(1, Math.floor(Math.min(720, window.innerWidth - 48) / Math.max(w, h)));
+  cv.style.width = w * scale + "px"; cv.style.height = h * scale + "px";
+  $("size").textContent = `${w}×${h}`;
+}
+function put(col, row, code) {
+  if (col >= W || row >= H) return;
+  pixels[row * W + col] = code;
+  hoverAuthor.delete(col + "," + row);
+  ctx.fillStyle = COLORS[code][1];
+  ctx.fillRect(col, row, 1, 1);
+}
+function showHover(col, row) {
+  const key = col + "," + row, author = hoverAuthor.get(key);
+  $("pos").textContent = `(${col}, ${row}) ${COLORS[pixels[row * W + col]][0]}` +
+    (author === undefined ? "" : author === "-" ? " · unpainted" : ` · by ${author}`);
+}
+function setSeq(s) { if (s > seq) seq = s; $("seq").textContent = seq; }
+
+function cellAt(ev) {
+  const r = cv.getBoundingClientRect();
+  return [Math.floor((ev.clientX - r.left) / r.width * W), Math.floor((ev.clientY - r.top) / r.height * H)];
+}
+// The brush's top-left, clamped so the whole stamp stays on the canvas.
+function brushOrigin(col, row) {
+  const off = Math.floor((brush - 1) / 2);
+  return [Math.min(Math.max(0, col - off), W - brush), Math.min(Math.max(0, row - off), H - brush)];
+}
+
+let painting = false, lastCell = "";
+function paintAt(ev) {
+  if (phase !== "live" || !myName) return;
+  const [col, row] = cellAt(ev);
+  if (col < 0 || row < 0 || col >= W || row >= H) return;
+  const key = col + "," + row;
+  if (key === lastCell) return;
+  lastCell = key;
+  if (performance.now() < coolUntil) return;
+  if (brush === 1) {
+    send(`paint ${col} ${row} ${COLORS[color][0]}`);
+  } else {
+    const [c, r] = brushOrigin(col, row);
+    send(`stamp ${c} ${r} ${brush} ${brush} ${color.toString(16).repeat(brush * brush)}`);
+  }
+}
+cv.addEventListener("pointerdown", (ev) => { painting = true; lastCell = ""; cv.setPointerCapture(ev.pointerId); paintAt(ev); });
+cv.addEventListener("pointerup", () => { painting = false; });
+cv.addEventListener("pointermove", (ev) => {
+  if (!W) return;
+  const [col, row] = cellAt(ev);
+  if (col < 0 || row < 0 || col >= W || row >= H) { $("hover").style.display = "none"; return; }
+  const [c, r] = brush === 1 ? [col, row] : brushOrigin(col, row);
+  const px = cv.getBoundingClientRect().width / W, hv = $("hover");
+  Object.assign(hv.style, { display: "block", left: c * px + "px", top: r * px + "px",
+                            width: brush * px + "px", height: brush * px + "px" });
+  showHover(col, row);
+  // Ask who painted this pixel once the pointer settles on it.
+  const key = col + "," + row;
+  if (key !== hoverCell) {
+    hoverCell = key; clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => { if (hoverCell === key) quiet(`read ${col} ${row}`); }, 150);
+  }
+  if (painting) paintAt(ev);
+});
+cv.addEventListener("pointerleave", () => { $("hover").style.display = "none"; });
+
+// ---------- cooldown ----------
+function startCooldown(ms) {
+  coolTotal = ms; coolUntil = performance.now() + ms;
+}
+function tickCooldown() {
+  const left = coolUntil - performance.now();
+  if (left > 0) {
+    $("coolbar").style.width = (left / coolTotal * 100) + "%";
+    $("cooltext").textContent = `cooldown ${Math.ceil(left)} ms`;
+  } else {
+    $("coolbar").style.width = "0";
+    $("cooltext").textContent = "ready";
+  }
+  requestAnimationFrame(tickCooldown);
+}
+requestAnimationFrame(tickCooldown);
+
+// ---------- protocol ----------
+// Sends without logging, for the background requests hovering makes.
+function quiet(line) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(line); }
+
+function send(line) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  lastSent = line;
+  ws.send(line);
+  log("> " + line, "out");
+}
+
+function resync() {
+  phase = "sync"; pending = [];
+  send(`subscribe 0 0 ${W} ${H}`);
+  send("snapshot");
+}
+
+function applySnapshot(header, rows) {
+  const [, s, c, r, w, h] = header.split(" ").map(Number);
+  if (phase === "size") { setSize(w, h); resync(); return; }
+  rows.forEach((line, dy) => [...line].forEach((ch, dx) => put(c + dx, r + dy, parseInt(ch, 16))));
+  seq = 0; setSeq(s);
+  if (phase === "sync") {
+    for (const d of pending) if (d.seq > s) applyDiff(d);
+    pending = []; phase = "live";
+    setStatus("live", true);
+  }
+}
+
+function applyDiff(d) {
+  put(d.col, d.row, d.code);
+  hoverAuthor.set(d.col + "," + d.row, d.author);
+  setSeq(d.seq);
+  noteActivity(d.seq, d.author, d.code);
+}
+
+function handle(text) {
+  const lines = text.split("\n");
+  const head = lines[0], parts = head.split(" ");
+  const kind = parts[0];
+  if (kind !== "diff" && kind !== "pixel") log(lines.length > 1 ? `${head}  (+${lines.length - 1} rows)` : head, kind === "error:" ? "err" : "");
+  switch (kind) {
+    case "snapshot": applySnapshot(head, lines.slice(1)); break;
+    case "diff": {
+      const d = { seq: +parts[1], col: +parts[2], row: +parts[3], code: NAME_TO_CODE[parts[4]], author: parts[5] };
+      if (phase === "live") applyDiff(d); else pending.push(d);
+      break;
+    }
+    case "welcome": myName = parts[1]; storeName(myName); showMe(); break;
+    case "painted": case "stamped": setSeq(+parts[1]); break;
+    case "cooldown": startCooldown(+parts[1]); break;
+    case "lagged": setStatus("lagged — resyncing", false); resync(); break;
+    case "pixel": {
+      const [col, row] = [+parts[1], +parts[2]];
+      hoverAuthor.set(col + "," + row, parts[4]);
+      if (hoverCell === col + "," + row) showHover(col, row);
+      if (hoverCell !== col + "," + row) log(head);
+      break;
+    }
+  }
+}
+
+function connect() {
+  setStatus("connecting…", false);
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.onopen = () => {
+    phase = "size"; setStatus("syncing…", false);
+    myName = null; showMe();
+    const name = wantName || storedName();
+    if (name) send(`hello ${name}`);
+    send("snapshot");
+  };
+  ws.onmessage = (ev) => handle(ev.data);
+  ws.onclose = () => { setStatus("disconnected — retrying", false); phase = "size"; setTimeout(connect, 1500); };
+}
+
+$("cmd").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && ev.target.value.trim()) { send(ev.target.value.trim()); ev.target.value = ""; }
+  if (ev.key === "ArrowUp" && lastSent) ev.target.value = lastSent;
+});
+
+connect();
+</script>
+</body>
+</html>
